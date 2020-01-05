@@ -1,4 +1,4 @@
-# udp_image_stream
+# robot_view
 This project is a pair of python scripts that allow to stream images over UDP Datagrams.
 
 ## Project Structure
