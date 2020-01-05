@@ -81,14 +81,21 @@ if __name__ == "__main__":
 
             if image is None:
                 print("Frame Lost")
-            
+
             else:
                 frames += 1
 
-                cv2.imshow("Hello World.png", image)
+                (h, w) = image.shape[:2]
+
+                center = (w / 2, h / 2)
+
+                M = cv2.getRotationMatrix2D(center, 180, 1)
+                rotated180 = cv2.warpAffine(image, M, (w, h))
+
+                cv2.imshow("CCNY Robotics Lab", image)
                 cv2.waitKey(delay=1) # 1ms
 
-        if(time.time() - t0 > 1):
+        if time.time() - t0 > 1:
             fps = round(frames/(time.time() - t0))
             print("fps ", fps)
             t0 = time.time()
