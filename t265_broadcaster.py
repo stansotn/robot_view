@@ -15,7 +15,7 @@
 # Python standard libraries
 import io
 import socket
-from math import tan, pi, ceil
+import math
 
 # Libraries reqire install
 # First import the library
@@ -25,7 +25,7 @@ import pyrealsense2 as rs
 
 # Set the client's ip and desired port here!
 PORT = 555
-RECEIVER_IP = "192.168.50.74"
+RECEIVER_IP = "192.168.1.10"
 
 # This constant must hold the same value on receiver and transmitter side.
 # Specifies the max amount of bytes sent per image datagram.
@@ -54,12 +54,33 @@ Returns the fisheye distortion from librealsense intrinsics
 def fisheye_distortion(intrinsics):
     return np.array(intrinsics.coeffs[:4])
 
-frame_data = {"left"  : None,
-              "right" : None,
-              "timestamp_ms" : None,
-              "translation_x": None,
-              "translation_y": None,
-              "translation_z": None
+def quaternion_to_euler(x, y, z, w):
+
+    t0 = +2.0 * (w * x + y * z)
+    t1 = +1.0 - 2.0 * (x * x + y * y)
+    X = math.degrees(math.atan2(t0, t1))
+
+    t2 = +2.0 * (w * y - z * x)
+    t2 = +1.0 if t2 > +1.0 else t2
+    t2 = -1.0 if t2 < -1.0 else t2
+    Y = math.degrees(math.asin(t2))
+
+    t3 = +2.0 * (w * z + x * y)
+    t4 = +1.0 - 2.0 * (y * y + z * z)
+    Z = math.degrees(math.atan2(t3, t4))
+
+    return X, Y, Z
+
+frame_data = {"left"            : None,
+              "right"           : None,
+              "timestamp_ms"    : None,
+              "translation_x"   : None,
+              "translation_y"   : None,
+              "translation_z"   : None,
+              "Qw"              : None,
+              "Qx"              : None,
+              "Qy"              : None,
+              "Qz"              : None
               }
 
 if __name__ == "__main__":
@@ -116,9 +137,9 @@ if __name__ == "__main__":
     #     \   |   /
     #      \ fov /
     #        \|/
-    stereo_fov_rad = 90 * (pi/180)  # 90 degree desired fov
+    stereo_fov_rad = 90 * (math.pi/180)  # 90 degree desired fov
     stereo_height_px = 300          # 300x300 pixel stereo output
-    stereo_focal_px = stereo_height_px/2 / tan(stereo_fov_rad/2)
+    stereo_focal_px = stereo_height_px/2 / math.tan(stereo_fov_rad/2)
 
     # We set the left rotation to identity and the right rotation
     # the rotation between the cameras
@@ -167,10 +188,16 @@ if __name__ == "__main__":
             frame_data["translation_x"] = pose.get_pose_data().translation.x
             frame_data["translation_y"] = pose.get_pose_data().translation.y
             frame_data["translation_z"] = pose.get_pose_data().translation.z
+            frame_data["Qw"] = pose.get_pose_data().rotation.w
+            frame_data["Qx"] = pose.get_pose_data().rotation.x
+            frame_data["Qy"] = pose.get_pose_data().rotation.y
+            frame_data["Qz"] = pose.get_pose_data().rotation.z
 
             frame_data["left"] = np.asanyarray(f1.get_data())
             frame_data["timestamp_ms"] = frameset.get_timestamp()
-
+            
+            pitch, roll, yaw = quaternion_to_euler(-frame_data["Qz"], frame_data["Qx"], frame_data["Qy"], frame_data["Qw"])
+            #pitch, yaw, roll = quaternion_to_euler(frame_data["Qx"], frame_data["Qy"], frame_data["Qz"], frame_data["Qw"])
             # Undistort and crop the center of the frames
             center_undistorted = cv2.remap(src=frame_data["left"],
                                            map1=undistort_rectify[0],
@@ -178,9 +205,10 @@ if __name__ == "__main__":
                                            interpolation=cv2.INTER_LINEAR)
 
             # Add coordinates to the camera view
-            coordinate_text = "X:{x}, Y:{y}, Z:{z}".format(x=round(frame_data["translation_x"], 3), 
+            coordinate_text = "X:{x}, Y:{y}, Z:{z}, O:{o}".format(x=round(frame_data["translation_x"], 3), 
                                                            y=round(frame_data["translation_y"], 3),
-                                                           z=round(frame_data["translation_z"], 3))
+                                                           z=round(frame_data["translation_z"], 3),
+                                                           o=round(yaw, 3))
             
             font = cv2.FONT_HERSHEY_SIMPLEX
             cv2.putText(center_undistorted, coordinate_text, (0, 295), font, 0.7, (255, 255, 255), 2, cv2.LINE_AA)
@@ -194,7 +222,7 @@ if __name__ == "__main__":
             with image_stream.getbuffer() as image_stream_view:
 
                 # Figure out how many packets are needed to send the whole image
-                num_of_packets = ceil(len(image_stream_view)/PACKET_MAX_SIZE)
+                num_of_packets = math.ceil(len(image_stream_view)/PACKET_MAX_SIZE)
                 #print("Num of packets to send: {n} packets".format(n = num_of_packets))
 
                 #print("sending frame...")
